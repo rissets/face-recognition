@@ -13,6 +13,7 @@ class FaceAuthApp {
         this.websocket = null;
         this.notifications = [];
         this.loadingTimeout = null;
+        this.autoLoginInterval = null;
         
         this.init();
     }
@@ -346,6 +347,10 @@ class FaceAuthApp {
         if (this.websocket) {
             this.websocket.close();
         }
+        if (this.autoLoginInterval) {
+            clearInterval(this.autoLoginInterval);
+            this.autoLoginInterval = null;
+        }
         this.showAlert('Success', 'Logged out successfully', 'success');
         this.showPage('home');
     }
@@ -671,17 +676,15 @@ class FaceAuthApp {
                                             <video id="loginVideo" class="d-none" autoplay muted style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;"></video>
                                             <div id="loginCameraPlaceholder" class="d-flex align-items-center justify-content-center h-100">
                                                 <div class="text-center">
-                                                    <i class="fas fa-camera text-muted" style="font-size: 3rem;"></i>
-                                                    <p class="text-muted mt-2 mb-0">Click to start camera</p>
+                                                    <i class="fas fa-user-shield text-muted" style="font-size: 3rem;"></i>
+                                                    <p class="text-muted mt-2 mb-0">Auto-Login with Face Recognition</p>
+                                                    <small class="text-muted">Click to start automatic authentication</small>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="d-grid gap-2">
                                             <button id="startLoginCamera" class="btn btn-success">
-                                                <i class="fas fa-camera me-2"></i>Start Camera
-                                            </button>
-                                            <button id="captureLoginFace" class="btn btn-primary d-none">
-                                                <i class="fas fa-user-check me-2"></i>Authenticate
+                                                <i class="fas fa-camera me-2"></i>Start Auto-Login
                                             </button>
                                             <button id="stopLoginCamera" class="btn btn-outline-secondary d-none">
                                                 <i class="fas fa-times me-2"></i>Stop Camera
@@ -689,8 +692,8 @@ class FaceAuthApp {
                                         </div>
                                         <div id="loginQualityInfo" class="mt-3 d-none">
                                             <div class="alert alert-info">
-                                                <i class="fas fa-info-circle me-2"></i>
-                                                <span id="loginQualityText">Position your face in the camera</span>
+                                                <i class="fas fa-robot me-2"></i>
+                                                <span id="loginQualityText">Scanning for face automatically...</span>
                                             </div>
                                         </div>
                                     </div>
@@ -722,10 +725,6 @@ class FaceAuthApp {
         // Face recognition login
         document.getElementById('startLoginCamera').addEventListener('click', () => {
             this.startLoginCamera();
-        });
-
-        document.getElementById('captureLoginFace').addEventListener('click', () => {
-            this.handleFaceLogin();
         });
 
         document.getElementById('stopLoginCamera').addEventListener('click', () => {
@@ -784,12 +783,11 @@ class FaceAuthApp {
             
             // Update buttons
             document.getElementById('startLoginCamera').classList.add('d-none');
-            document.getElementById('captureLoginFace').classList.remove('d-none');
             document.getElementById('stopLoginCamera').classList.remove('d-none');
             document.getElementById('loginQualityInfo').classList.remove('d-none');
 
-            // Start quality monitoring
-            this.monitorLoginQuality();
+            // Start auto-detection
+            this.startAutoLoginDetection();
 
         } catch (error) {
             this.showAlert('Error', error.message, 'error');
@@ -799,36 +797,68 @@ class FaceAuthApp {
     stopLoginCamera() {
         this.stopCamera();
         
+        // Stop auto-detection
+        if (this.autoLoginInterval) {
+            clearInterval(this.autoLoginInterval);
+            this.autoLoginInterval = null;
+        }
+        
         const video = document.getElementById('loginVideo');
         video.classList.add('d-none');
         document.getElementById('loginCameraPlaceholder').classList.remove('d-none');
         
         // Update buttons
         document.getElementById('startLoginCamera').classList.remove('d-none');
-        document.getElementById('captureLoginFace').classList.add('d-none');
         document.getElementById('stopLoginCamera').classList.add('d-none');
         document.getElementById('loginQualityInfo').classList.add('d-none');
     }
 
-    monitorLoginQuality() {
-        // Simple quality monitoring for demo
+    startAutoLoginDetection() {
         const video = document.getElementById('loginVideo');
         const qualityText = document.getElementById('loginQualityText');
+        let consecutiveGoodFrames = 0;
+        let isAuthenticating = false;
         
-        let qualityInterval = setInterval(() => {
-            if (!this.camera) {
-                clearInterval(qualityInterval);
+        this.autoLoginInterval = setInterval(async () => {
+            if (!this.camera || isAuthenticating) {
                 return;
             }
 
-            // Simulate quality check
-            const isReady = video.videoWidth > 0 && video.videoHeight > 0;
-            if (isReady) {
-                qualityText.innerHTML = '<span class="quality-indicator quality-good"></span>Face detected - Ready to authenticate';
-            } else {
-                qualityText.innerHTML = '<span class="quality-indicator quality-poor"></span>Position your face in the camera';
+            // Check if video is ready
+            const isVideoReady = video.videoWidth > 0 && video.videoHeight > 0;
+            
+            if (!isVideoReady) {
+                qualityText.innerHTML = '<span class="quality-indicator quality-poor"></span>Initializing camera...';
+                consecutiveGoodFrames = 0;
+                return;
             }
-        }, 1000);
+
+            // Simulate face detection quality check
+            // In a real implementation, you would use actual face detection here
+            const hasGoodQuality = Math.random() > 0.3; // Simulate 70% chance of good detection
+            
+            if (hasGoodQuality) {
+                consecutiveGoodFrames++;
+                qualityText.innerHTML = `<span class="quality-indicator quality-good"></span>Face detected! Auto-login in ${Math.max(0, 3 - consecutiveGoodFrames)} seconds...`;
+                
+                // Auto-authenticate after 3 consecutive good frames (3 seconds)
+                if (consecutiveGoodFrames >= 3) {
+                    isAuthenticating = true;
+                    qualityText.innerHTML = '<span class="quality-indicator quality-excellent"></span>Authenticating...';
+                    
+                    try {
+                        await this.handleFaceLogin();
+                    } catch (error) {
+                        console.error('Auto-login failed:', error);
+                        isAuthenticating = false;
+                        consecutiveGoodFrames = 0;
+                    }
+                }
+            } else {
+                consecutiveGoodFrames = Math.max(0, consecutiveGoodFrames - 1);
+                qualityText.innerHTML = '<span class="quality-indicator quality-fair"></span>Please position your face clearly in the camera';
+            }
+        }, 1000); // Check every second
     }
 
     async handleFaceLogin() {

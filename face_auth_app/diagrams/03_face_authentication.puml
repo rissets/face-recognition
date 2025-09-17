@@ -1,0 +1,56 @@
+@startuml Face Authentication
+!theme plain
+title Face Authentication Flow
+
+actor User
+participant "Client App" as Client
+participant "Django API" as API
+participant "FaceService" as FS
+participant "InsightFace\nModel" as IF
+participant "ChromaDB" as Chroma
+participant "Database" as DB
+participant "Auth Token" as Token
+
+User -> Client: Capture face image for login
+Client -> API: POST /api/authenticate/\n(image_data)
+
+API -> FS: authenticate_user(image_data)
+FS -> FS: decode_image(image_data)
+FS -> IF: detect_faces(image)
+IF --> FS: List of detected faces
+
+alt No faces detected
+    FS --> API: {success: false, error: "No faces detected"}
+else Face detected
+    FS -> FS: Select best face\n(highest det_score)
+    FS -> Chroma: search_similar_faces(\nembedding, n_results=5, threshold=0.7)
+    
+    Chroma -> Chroma: Query with cosine similarity
+    Chroma -> Chroma: Filter by similarity threshold
+    Chroma --> FS: List of matching users\n(user_id, similarity_score)
+    
+    alt No matches found
+        FS --> API: {success: false, error: "No matching face"}
+    else Match found
+        FS --> API: {success: true, user_id, confidence, matches}
+        
+        API -> DB: Get User by user_id
+        DB --> API: User object
+        
+        API -> Token: Get or create auth token
+        Token --> API: Authentication token
+    end
+end
+
+API -> DB: Create AuthenticationAttempt\n(user, success, confidence, metadata)
+DB --> API: Attempt logged
+
+alt Authentication successful
+    API --> Client: {success: true, user_data, token}
+    Client --> User: Login successful
+else Authentication failed
+    API --> Client: {success: false, error_message}
+    Client --> User: Login failed
+end
+
+@enduml

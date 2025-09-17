@@ -13,6 +13,7 @@ class FaceAuthApp {
         this.websocket = null;
         this.notifications = [];
         this.loadingTimeout = null;
+        this.autoLoginInterval = null;
         
         this.init();
     }
@@ -235,6 +236,12 @@ class FaceAuthApp {
 
     // Page Management
     showPage(pageId) {
+        // Clean up any running intervals when switching pages
+        if (this.autoLoginInterval) {
+            clearInterval(this.autoLoginInterval);
+            this.autoLoginInterval = null;
+        }
+        
         // Hide all pages
         document.querySelectorAll('.page').forEach(page => {
             page.classList.add('d-none');
@@ -345,6 +352,10 @@ class FaceAuthApp {
         }
         if (this.websocket) {
             this.websocket.close();
+        }
+        if (this.autoLoginInterval) {
+            clearInterval(this.autoLoginInterval);
+            this.autoLoginInterval = null;
         }
         this.showAlert('Success', 'Logged out successfully', 'success');
         this.showPage('home');
@@ -671,17 +682,15 @@ class FaceAuthApp {
                                             <video id="loginVideo" class="d-none" autoplay muted style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;"></video>
                                             <div id="loginCameraPlaceholder" class="d-flex align-items-center justify-content-center h-100">
                                                 <div class="text-center">
-                                                    <i class="fas fa-camera text-muted" style="font-size: 3rem;"></i>
-                                                    <p class="text-muted mt-2 mb-0">Click to start camera</p>
+                                                    <i class="fas fa-user-shield text-muted" style="font-size: 3rem;"></i>
+                                                    <p class="text-muted mt-2 mb-0">Auto-Login with Face Recognition</p>
+                                                    <small class="text-muted">Click to start automatic authentication</small>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="d-grid gap-2">
                                             <button id="startLoginCamera" class="btn btn-success">
-                                                <i class="fas fa-camera me-2"></i>Start Camera
-                                            </button>
-                                            <button id="captureLoginFace" class="btn btn-primary d-none">
-                                                <i class="fas fa-user-check me-2"></i>Authenticate
+                                                <i class="fas fa-camera me-2"></i>Start Auto-Login
                                             </button>
                                             <button id="stopLoginCamera" class="btn btn-outline-secondary d-none">
                                                 <i class="fas fa-times me-2"></i>Stop Camera
@@ -689,8 +698,8 @@ class FaceAuthApp {
                                         </div>
                                         <div id="loginQualityInfo" class="mt-3 d-none">
                                             <div class="alert alert-info">
-                                                <i class="fas fa-info-circle me-2"></i>
-                                                <span id="loginQualityText">Position your face in the camera</span>
+                                                <i class="fas fa-robot me-2"></i>
+                                                <span id="loginQualityText">Scanning for face automatically...</span>
                                             </div>
                                         </div>
                                     </div>
@@ -722,10 +731,6 @@ class FaceAuthApp {
         // Face recognition login
         document.getElementById('startLoginCamera').addEventListener('click', () => {
             this.startLoginCamera();
-        });
-
-        document.getElementById('captureLoginFace').addEventListener('click', () => {
-            this.handleFaceLogin();
         });
 
         document.getElementById('stopLoginCamera').addEventListener('click', () => {
@@ -784,12 +789,11 @@ class FaceAuthApp {
             
             // Update buttons
             document.getElementById('startLoginCamera').classList.add('d-none');
-            document.getElementById('captureLoginFace').classList.remove('d-none');
             document.getElementById('stopLoginCamera').classList.remove('d-none');
             document.getElementById('loginQualityInfo').classList.remove('d-none');
 
-            // Start quality monitoring
-            this.monitorLoginQuality();
+            // Start auto-detection
+            this.startAutoLoginDetection();
 
         } catch (error) {
             this.showAlert('Error', error.message, 'error');
@@ -799,36 +803,94 @@ class FaceAuthApp {
     stopLoginCamera() {
         this.stopCamera();
         
+        // Stop auto-detection
+        if (this.autoLoginInterval) {
+            clearInterval(this.autoLoginInterval);
+            this.autoLoginInterval = null;
+        }
+        
         const video = document.getElementById('loginVideo');
         video.classList.add('d-none');
         document.getElementById('loginCameraPlaceholder').classList.remove('d-none');
         
         // Update buttons
         document.getElementById('startLoginCamera').classList.remove('d-none');
-        document.getElementById('captureLoginFace').classList.add('d-none');
         document.getElementById('stopLoginCamera').classList.add('d-none');
         document.getElementById('loginQualityInfo').classList.add('d-none');
     }
 
-    monitorLoginQuality() {
-        // Simple quality monitoring for demo
+    startAutoLoginDetection() {
         const video = document.getElementById('loginVideo');
         const qualityText = document.getElementById('loginQualityText');
+        let consecutiveGoodFrames = 0;
+        let isAuthenticating = false;
+        let detectionAttempts = 0;
         
-        let qualityInterval = setInterval(() => {
-            if (!this.camera) {
-                clearInterval(qualityInterval);
+        qualityText.innerHTML = '<span class="quality-indicator quality-fair"></span>Auto-detection active - Looking for faces...';
+        
+        this.autoLoginInterval = setInterval(async () => {
+            if (!this.camera || isAuthenticating) {
                 return;
             }
 
-            // Simulate quality check
-            const isReady = video.videoWidth > 0 && video.videoHeight > 0;
-            if (isReady) {
-                qualityText.innerHTML = '<span class="quality-indicator quality-good"></span>Face detected - Ready to authenticate';
-            } else {
-                qualityText.innerHTML = '<span class="quality-indicator quality-poor"></span>Position your face in the camera';
+            detectionAttempts++;
+
+            // Check if video is ready
+            const isVideoReady = video.videoWidth > 0 && video.videoHeight > 0;
+            
+            if (!isVideoReady) {
+                qualityText.innerHTML = '<span class="quality-indicator quality-poor"></span>Initializing camera...';
+                consecutiveGoodFrames = 0;
+                return;
             }
-        }, 1000);
+
+            // Simulate more realistic face detection
+            // In a real implementation, you would use actual face detection here
+            const baseChance = 0.4; // Base 40% chance
+            const timeBonus = Math.min(detectionAttempts * 0.05, 0.3); // Increase chance over time, max 30% bonus
+            const hasGoodQuality = Math.random() < (baseChance + timeBonus);
+            
+            if (hasGoodQuality) {
+                consecutiveGoodFrames++;
+                const remainingSeconds = Math.max(0, 3 - consecutiveGoodFrames);
+                
+                if (remainingSeconds > 0) {
+                    qualityText.innerHTML = `<span class="quality-indicator quality-good"></span>Face detected! Auto-login in ${remainingSeconds} seconds...`;
+                } else {
+                    qualityText.innerHTML = '<span class="quality-indicator quality-excellent"></span>Face verified! Authenticating now...';
+                }
+                
+                // Auto-authenticate after 3 consecutive good frames (3 seconds)
+                if (consecutiveGoodFrames >= 3) {
+                    isAuthenticating = true;
+                    
+                    try {
+                        await this.handleFaceLogin();
+                    } catch (error) {
+                        console.error('Auto-login failed:', error);
+                        isAuthenticating = false;
+                        consecutiveGoodFrames = 0;
+                        detectionAttempts = Math.max(0, detectionAttempts - 5); // Reset progress on failure
+                        qualityText.innerHTML = '<span class="quality-indicator quality-poor"></span>Authentication failed, trying again...';
+                    }
+                }
+            } else {
+                // Gradually reduce consecutive frames but don't reset completely
+                if (consecutiveGoodFrames > 0) {
+                    consecutiveGoodFrames = Math.max(0, consecutiveGoodFrames - 0.5);
+                }
+                
+                const statusMessages = [
+                    'Please position your face clearly in the camera',
+                    'Scanning for face...',
+                    'Improve lighting for better detection',
+                    'Make sure your face is centered',
+                ];
+                
+                const messageIndex = Math.floor(detectionAttempts / 3) % statusMessages.length;
+                qualityText.innerHTML = `<span class="quality-indicator quality-fair"></span>${statusMessages[messageIndex]}`;
+            }
+        }, 1000); // Check every second
     }
 
     async handleFaceLogin() {

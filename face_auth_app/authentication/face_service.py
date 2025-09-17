@@ -20,7 +20,7 @@ class FaceRecognitionService:
     
     def __init__(self):
         self.model = None
-        self.threshold = settings.FACE_RECOGNITION.get('THRESHOLD', 0.7)
+        self.threshold = settings.FACE_RECOGNITION.get('THRESHOLD', 0.91)
         self.det_size = settings.FACE_RECOGNITION.get('DET_SIZE', (640, 640))
         self.model_name = settings.FACE_RECOGNITION.get('MODEL_NAME', 'buffalo_l')
         self._initialize_model()

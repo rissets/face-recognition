@@ -1,0 +1,91 @@
+@startuml Data Architecture
+!theme plain
+title Data Storage Architecture
+
+package "Django Database" {
+    class User {
+        +UUID id
+        +String email
+        +Boolean is_face_enrolled
+        +DateTime face_enrollment_date
+        +DateTime created_at
+        +DateTime updated_at
+    }
+    
+    class FaceEnrollment {
+        +UUID id
+        +ForeignKey user
+        +DateTime enrollment_date
+        +Integer image_count
+        +Integer embedding_dimension
+        +String status
+        +JSON metadata
+    }
+    
+    class AuthenticationAttempt {
+        +UUID id
+        +ForeignKey user
+        +DateTime attempt_date
+        +Boolean success
+        +Float confidence_score
+        +String ip_address
+        +String user_agent
+        +String method
+        +String error_message
+        +JSON metadata
+    }
+    
+    class FaceImage {
+        +UUID id
+        +ForeignKey user
+        +ForeignKey enrollment
+        +String image_path
+        +String chroma_id
+        +DateTime upload_date
+        +Float image_quality_score
+        +JSON face_bbox
+        +JSON landmarks
+        +JSON metadata
+    }
+}
+
+package "ChromaDB Vector Store" {
+    class FaceEmbeddings {
+        +String id
+        +Vector embedding[512]
+        +JSON metadata
+        +String user_id
+        +Float det_score
+        +String bbox
+        +String enrollment_method
+    }
+}
+
+User ||--o{ FaceEnrollment : "1 to many"
+User ||--o{ AuthenticationAttempt : "1 to many"
+User ||--o{ FaceImage : "1 to many"
+FaceEnrollment ||--o{ FaceImage : "1 to many"
+
+FaceImage ..> FaceEmbeddings : "chroma_id reference"
+
+note bottom of FaceEmbeddings
+  - Cosine similarity index
+  - 512-dimensional vectors from InsightFace
+  - Metadata includes detection scores,
+    bbox coordinates, enrollment method
+  - Threshold: 0.7 for authentication
+end note
+
+note right of User
+  Extended Django User model
+  with face authentication support
+end note
+
+note bottom of AuthenticationAttempt
+  Comprehensive logging for:
+  - Security monitoring
+  - Performance analysis
+  - Audit trails
+end note
+
+@enduml

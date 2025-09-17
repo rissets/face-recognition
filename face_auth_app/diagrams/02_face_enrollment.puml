@@ -1,0 +1,45 @@
+@startuml Face Enrollment
+!theme plain
+title Face Enrollment Flow
+
+actor User
+participant "Client App" as Client
+participant "Django API" as API
+participant "FaceService" as FS
+participant "InsightFace\nModel" as IF
+participant "ChromaDB" as Chroma
+participant "Database" as DB
+
+User -> Client: Capture/Upload face image
+Client -> API: POST /api/enroll/\n(image_data, metadata)
+API -> API: Validate auth token & input
+
+API -> DB: Create FaceEnrollment\n(status='pending')
+DB --> API: Enrollment record created
+
+API -> FS: enroll_user_face(user_id, image_data)
+FS -> FS: decode_image(image_data)
+FS -> IF: detect_faces(image)
+IF --> FS: List of detected faces\n(embeddings, bbox, scores)
+
+alt No faces detected
+    FS --> API: {success: false, error: "No faces detected"}
+    API -> DB: Update enrollment\n(status='failed')
+    API --> Client: Enrollment failed
+else Face detected
+    FS -> FS: Select best face\n(highest det_score)
+    FS -> Chroma: add_face_embedding(\nuser_id, embedding, metadata)
+    Chroma -> Chroma: Store embedding with\ncosine similarity index
+    Chroma --> FS: Storage successful
+    
+    FS --> API: {success: true, embedding_dimension, scores}
+    
+    API -> DB: Update FaceEnrollment\n(status='completed')
+    API -> DB: Update User\n(is_face_enrolled=True)
+    API -> DB: Create FaceImage record\n(chroma_id, metadata)
+    
+    API --> Client: {success: true, enrollment_id, details}
+    Client --> User: Enrollment successful
+end
+
+@enduml

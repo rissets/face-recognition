@@ -1,0 +1,40 @@
+@startuml WebSocket Authentication
+!theme plain
+title WebSocket Real-time Authentication
+
+actor User
+participant "Client App" as Client
+participant "WebSocket\nConsumer" as WS
+participant "FaceService" as FS
+participant "ChromaDB" as Chroma
+participant "Database" as DB
+
+User -> Client: Start real-time\nface authentication
+Client -> WS: WebSocket connection\n+ auth token
+
+WS -> WS: Authenticate connection
+WS --> Client: Connection established
+
+loop Real-time face detection
+    User -> Client: Camera frame capture
+    Client -> WS: send_frame(image_data)
+    
+    WS -> FS: authenticate_user(frame_data)
+    FS -> FS: Process frame\n(detect + match)
+    FS -> Chroma: Search similar faces
+    Chroma --> FS: Match results
+    FS --> WS: Authentication result
+    
+    WS -> DB: Log attempt (background)
+    
+    WS --> Client: {\n  success: boolean,\n  confidence: float,\n  user_id: string,\n  timestamp: datetime\n}
+    
+    Client -> Client: Update UI\n(show result/feedback)
+    Client --> User: Visual feedback
+end
+
+User -> Client: Stop authentication
+Client -> WS: Disconnect
+WS -> WS: Cleanup resources
+
+@enduml

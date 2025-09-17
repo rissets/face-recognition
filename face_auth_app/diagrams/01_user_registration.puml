@@ -1,0 +1,26 @@
+@startuml User Registration
+!theme plain
+title User Registration Flow
+
+actor User
+participant "Client App" as Client
+participant "Django API" as API
+participant "Database" as DB
+participant "Auth Token" as Token
+
+User -> Client: Input registration data\n(email, username, password)
+Client -> API: POST /api/register/
+API -> API: Validate input data
+API -> DB: Create User record
+DB --> API: User created
+API -> Token: Generate auth token
+Token --> API: Token created
+API --> Client: Response with user data & token
+Client --> User: Registration successful
+
+note right of API
+  User.is_face_enrolled = False
+  User.face_enrollment_date = None
+end note
+
+@enduml

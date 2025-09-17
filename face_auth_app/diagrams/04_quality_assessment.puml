@@ -1,0 +1,33 @@
+@startuml Face Quality Assessment
+!theme plain
+title Face Quality Assessment Flow
+
+actor User
+participant "Client App" as Client
+participant "Django API" as API
+participant "FaceService" as FS
+participant "InsightFace\nModel" as IF
+
+User -> Client: Request quality check\nbefore enrollment
+Client -> API: POST /api/quality-check/\n(image_data)
+
+API -> FS: get_face_quality_score(image_data)
+FS -> FS: decode_image(image_data)
+FS -> IF: detect_faces(image)
+IF --> FS: List of detected faces\n(with scores and metadata)
+
+alt No faces detected
+    FS --> API: {success: false, quality_score: 0.0}
+else Face detected
+    FS -> FS: Calculate quality metrics:\n- Face area ratio\n- Detection score\n- Blur assessment\n- Lighting conditions
+    
+    FS -> FS: Generate quality score\n(0.0 - 1.0)
+    
+    FS --> API: {\n  success: true,\n  quality_score: 0.85,\n  recommendations: [...],\n  face_count: 1,\n  bbox: [x1,y1,x2,y2]\n}
+end
+
+API --> Client: Quality assessment result
+Client -> Client: Display quality feedback\nand recommendations
+Client --> User: Quality assessment\nwith improvement tips
+
+@enduml

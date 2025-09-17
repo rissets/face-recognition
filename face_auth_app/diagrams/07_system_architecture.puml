@@ -1,0 +1,90 @@
+@startuml System Architecture
+!theme plain
+title Face Authentication System Architecture
+
+package "Client Layer" {
+    [Web Browser] as Browser
+    [Mobile App] as Mobile
+    [JavaScript SDK] as JS
+}
+
+package "API Gateway" {
+    [Django REST API] as API
+    [WebSocket Server] as WS
+}
+
+package "Business Logic" {
+    [FaceRecognitionService] as FaceService
+    [ChromaDBService] as ChromaService
+    [AuthenticationService] as AuthService
+}
+
+package "AI/ML Layer" {
+    [InsightFace Model] as InsightFace
+    [Face Detection] as Detection
+    [Face Encoding] as Encoding
+}
+
+package "Data Storage" {
+    database "PostgreSQL\n(Metadata)" as DB
+    database "ChromaDB\n(Embeddings)" as Chroma
+    storage "File Storage\n(Images)" as Files
+}
+
+package "Infrastructure" {
+    [Redis Cache] as Cache
+    [Message Queue] as Queue
+    [Load Balancer] as LB
+}
+
+' Client connections
+Browser --> LB
+Mobile --> LB
+JS --> LB
+
+' Load balancer to API
+LB --> API
+LB --> WS
+
+' API to services
+API --> FaceService
+API --> AuthService
+WS --> FaceService
+
+' Service dependencies
+FaceService --> ChromaService
+FaceService --> InsightFace
+ChromaService --> Chroma
+
+' AI/ML flow
+InsightFace --> Detection
+InsightFace --> Encoding
+
+' Data persistence
+API --> DB
+API --> Cache
+ChromaService --> Chroma
+FaceService --> Files
+
+' Background processing
+API --> Queue
+
+note right of InsightFace
+  Model: buffalo_l
+  Provider: CPU/ONNX
+  Output: 512D embeddings
+end note
+
+note right of Chroma
+  Vector similarity search
+  Cosine distance
+  Persistent storage
+end note
+
+note right of DB
+  User metadata
+  Enrollment tracking
+  Authentication logs
+end note
+
+@enduml
