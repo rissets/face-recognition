@@ -1,0 +1,13 @@
+Django==4.2.7
+djangorestframework==3.14.0
+channels==4.0.0
+channels-redis==4.1.0
+chromadb==1.1.0
+opencv-python==4.12.0.88
+insightface==0.7.3
+numpy==2.2.6
+Pillow==10.4.0
+redis==5.0.1
+python-dotenv==1.1.1
+django-cors-headers==4.4.0
+websocket-client==1.8.0
